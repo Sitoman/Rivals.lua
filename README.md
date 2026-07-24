@@ -1,0 +1,2 @@
+# Rivals.lua
+Test
