@@ -131,7 +131,6 @@ local function GetTargetPart(character)
    return character:FindFirstChild("Head")
 end
 
--- Fungsi semakan pemain sah (Tanpa Team Check, hanya semak sama ada hidup dan bukan diri sendiri)
 local function IsValidTarget(player)
    if player == localPlayer then return false end
    if not player.Character then return false end
@@ -289,7 +288,7 @@ RunService:BindToRenderStep("SitomanEngine", Enum.RenderPriority.Camera.Value + 
    UpdateESP()  
    UpdateHitboxes()  
 
-   -- --- AUTO KILL / AUTO FARM LOGIC ---
+   -- --- AUTO KILL / AUTO FARM LOGIC (NOCLIP DIBUANG) ---
    if Settings.AutoKill then
        pcall(function()
            if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
@@ -315,10 +314,7 @@ RunService:BindToRenderStep("SitomanEngine", Enum.RenderPriority.Camera.Value + 
                    local targetHrp = closestTarget.Character:FindFirstChild("HumanoidRootPart")
                    
                    if targetHrp and targetHead then
-                       for _, part in ipairs(localPlayer.Character:GetDescendants()) do
-                           if part:IsA("BasePart") then part.CanCollide = false end
-                       end
-                       
+                       -- Bahagian noclip dibuang sepenuhnya di sini
                        myHrp.CFrame = targetHrp.CFrame * CFrame.new(0, 3.5, 0)
                        myHrp.Velocity = Vector3.new(0, 0, 0)
                        Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, targetHead.Position)
@@ -585,5 +581,3 @@ end
 
 MakeDraggable(MainFrame)
 MakeDraggable(ToggleButton)
-
-
