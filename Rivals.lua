@@ -11,13 +11,14 @@ local Camera = workspace.CurrentCamera
 -- GUI Base Parent Fallback
 local parentGui = CoreGui:FindFirstChild("RobloxGui") or localPlayer:WaitForChild("PlayerGui")
 
--- Clean up pre-existing instances to avoid duplicate overlays
+-- Clean up pre-existing instances
 if parentGui:FindFirstChild("SitomanStudioHub") then
    parentGui.SitomanStudioHub:Destroy()
 end
 
 local PhantomUI = Instance.new("ScreenGui", parentGui)
 PhantomUI.Name = "SitomanStudioHub"
+PhantomUI.ResetOnSpawn = false
 
 -- Main Frame
 local MainFrame = Instance.new("Frame", PhantomUI)
@@ -79,9 +80,9 @@ end)
 
 -- --- ENGINE STATE ---
 local Settings = {
+   AutoKill = false,
    CircleEnabled = false,
    ShootButtonEnabled = false,
-   TeamCheck = false,
    Radius = 200,
    BoxWidth = 150,
    BoxHeight = 300,
@@ -96,34 +97,51 @@ local Settings = {
 local DebugHitboxes = Settings.DebugHitboxes
 local HitboxSize = Settings.HitboxSize
 
--- Circular FOV Drawing
-local FOVCircle = Drawing and Drawing.new("Circle") or nil
-if FOVCircle then
-   FOVCircle.Thickness = 2
-   FOVCircle.NumSides = 64
-   FOVCircle.Radius = Settings.Radius
-   FOVCircle.Filled = false
-   FOVCircle.Visible = false
-end
-
--- FOV Square/Rect Drawing using Lines
-local RectLines = {}
-if Drawing then
-   RectLines = {
-       Top = Drawing.new("Line"),
-       Bottom = Drawing.new("Line"),
-       Left = Drawing.new("Line"),
-       Right = Drawing.new("Line")
-   }
-   for _, line in pairs(RectLines) do
-       line.Thickness = 2
-       line.Visible = false
+-- Circular FOV Drawing (Safe Check)
+local FOVCircle = nil
+pcall(function()
+   if Drawing then
+       FOVCircle = Drawing.new("Circle")
+       FOVCircle.Thickness = 2
+       FOVCircle.NumSides = 64
+       FOVCircle.Radius = Settings.Radius
+       FOVCircle.Filled = false
+       FOVCircle.Visible = false
    end
-end
+end)
 
--- Helper to find Target Part (Tepat pada Kepala/Head secara mutlak)
+-- FOV Rect Lines (Safe Check)
+local RectLines = {}
+pcall(function()
+   if Drawing then
+       RectLines = {
+           Top = Drawing.new("Line"),
+           Bottom = Drawing.new("Line"),
+           Left = Drawing.new("Line"),
+           Right = Drawing.new("Line")
+       }
+       for _, line in pairs(RectLines) do
+           line.Thickness = 2
+           line.Visible = false
+       end
+   end
+end)
+
 local function GetTargetPart(character)
    return character:FindFirstChild("Head")
+end
+
+-- Fungsi semakan pemain sah (Tanpa Team Check, hanya semak sama ada hidup dan bukan diri sendiri)
+local function IsValidTarget(player)
+   if player == localPlayer then return false end
+   if not player.Character then return false end
+   
+   local humanoid = player.Character:FindFirstChild("Humanoid")
+   local targetHrp = player.Character:FindFirstChild("HumanoidRootPart")
+   
+   if not humanoid or not targetHrp or humanoid.Health <= 0 then return false end
+   
+   return true
 end
 
 -- --- RTX SHADER CONTROLLER ---
@@ -191,64 +209,63 @@ local ESPFolder = Instance.new("Folder", parentGui)
 ESPFolder.Name = "SitomanESPStorage"
 
 local function UpdateESP()
-   for _, player in ipairs(Players:GetPlayers()) do
-       if player ~= localPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-           local existingHighlight = ESPFolder:FindFirstChild(player.Name)
-           if Settings.ESPEnabled then
-               if not (Settings.TeamCheck and player.Team == localPlayer.Team) then
-                   if not existingHighlight then
-                       local highlight = Instance.new("Highlight")
-                       highlight.Name = player.Name
-                       highlight.FillColor = Color3.fromRGB(255, 50, 50)
-                       highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-                       highlight.FillTransparency = 0.5
-                       highlight.OutlineTransparency = 0
-                       highlight.Adornee = player.Character
-                       highlight.Parent = ESPFolder
-                   else
-                       existingHighlight.Adornee = player.Character
+   pcall(function()
+       for _, player in ipairs(Players:GetPlayers()) do
+           if player ~= localPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+               local existingHighlight = ESPFolder:FindFirstChild(player.Name)
+               if Settings.ESPEnabled then
+                   if IsValidTarget(player) then
+                       if not existingHighlight then
+                           local highlight = Instance.new("Highlight")
+                           highlight.Name = player.Name
+                           highlight.FillColor = Color3.fromRGB(255, 50, 50)
+                           highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+                           highlight.FillTransparency = 0.5
+                           highlight.OutlineTransparency = 0
+                           highlight.Adornee = player.Character
+                           highlight.Parent = ESPFolder
+                       else
+                           existingHighlight.Adornee = player.Character
+                       end
+                   elseif existingHighlight then
+                       existingHighlight:Destroy()
                    end
                elseif existingHighlight then
                    existingHighlight:Destroy()
                end
-           elseif existingHighlight then
-               existingHighlight:Destroy()
+           else
+               local highlight = ESPFolder:FindFirstChild(player.Name)
+               if highlight then highlight:Destroy() end
            end
-       else
-           local highlight = ESPFolder:FindFirstChild(player.Name)
-           if highlight then highlight:Destroy() end
        end
-   end
+   end)
 end
 
 -- --- HITBOX EXPANDER CONTROLLER ---
 local function UpdateHitboxes()
-   for _, player in ipairs(Players:GetPlayers()) do
-       if player ~= localPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-           local hrp = player.Character.HumanoidRootPart
-           if DebugHitboxes then
-               if not (Settings.TeamCheck and player.Team == localPlayer.Team) then
-                   hrp.Size = Vector3.new(HitboxSize, HitboxSize, HitboxSize)
-                   hrp.Transparency = 0.4
-                   hrp.Color = Color3.fromRGB(130, 0, 0)
-                   hrp.Material = Enum.Material.Neon
-                   hrp.CanCollide = false
+   pcall(function()
+       for _, player in ipairs(Players:GetPlayers()) do
+           if player ~= localPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+               local hrp = player.Character.HumanoidRootPart
+               if DebugHitboxes then
+                   if IsValidTarget(player) then
+                       hrp.Size = Vector3.new(HitboxSize, HitboxSize, HitboxSize)
+                       hrp.Transparency = 0.4
+                       hrp.Color = Color3.fromRGB(130, 0, 0)
+                       hrp.Material = Enum.Material.Neon
+                       hrp.CanCollide = false
+                   else
+                       hrp.Size = Vector3.new(2, 2, 1)
+                       hrp.Transparency = 1
+                   end
                else
                    hrp.Size = Vector3.new(2, 2, 1)
                    hrp.Transparency = 1
                end
-           else
-               hrp.Size = Vector3.new(2, 2, 1)
-               hrp.Transparency = 1
            end
        end
-   end
+   end)
 end
-
-Players.PlayerRemoving:Connect(function(player)
-   local highlight = ESPFolder:FindFirstChild(player.Name)
-   if highlight then highlight:Destroy() end
-end)
 
 -- --- MAIN RENDER LOOP & CHROMA ---
 local SliderFillsList = {}
@@ -257,63 +274,104 @@ RunService:BindToRenderStep("SitomanEngine", Enum.RenderPriority.Camera.Value + 
    local hue = (tick() * 0.4) % 1
    local rgbColor = Color3.fromHSV(hue, 0.8, 1)
 
-   MainStroke.Color = rgbColor  
-   HeaderText.TextColor3 = rgbColor  
-   ToggleButton.BackgroundColor3 = rgbColor  
-   if FOVCircle then FOVCircle.Color = rgbColor end  
-   for _, line in pairs(RectLines) do line.Color = rgbColor end  
+   pcall(function()
+       MainStroke.Color = rgbColor  
+       HeaderText.TextColor3 = rgbColor  
+       ToggleButton.BackgroundColor3 = rgbColor  
+       if FOVCircle then FOVCircle.Color = rgbColor end  
+       for _, line in pairs(RectLines) do line.Color = rgbColor end  
 
-   for _, fill in ipairs(SliderFillsList) do  
-       if fill and fill.Parent then fill.BackgroundColor3 = rgbColor end  
-   end  
+       for _, fill in ipairs(SliderFillsList) do  
+           if fill and fill.Parent then fill.BackgroundColor3 = rgbColor end  
+       end  
+   end)
 
    UpdateESP()  
    UpdateHitboxes()  
+
+   -- --- AUTO KILL / AUTO FARM LOGIC ---
+   if Settings.AutoKill then
+       pcall(function()
+           if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+               local myHrp = localPlayer.Character.HumanoidRootPart
+               local closestTarget = nil
+               local shortestDist = math.huge
+
+               for _, player in ipairs(Players:GetPlayers()) do
+                   if IsValidTarget(player) then
+                       local targetHrp = player.Character:FindFirstChild("HumanoidRootPart")
+                       if targetHrp then
+                           local dist = (targetHrp.Position - myHrp.Position).Magnitude
+                           if dist < shortestDist then
+                               closestTarget = player
+                               shortestDist = dist
+                           end
+                       end
+                   end
+               end
+
+               if closestTarget and closestTarget.Character then
+                   local targetHead = closestTarget.Character:FindFirstChild("Head")
+                   local targetHrp = closestTarget.Character:FindFirstChild("HumanoidRootPart")
+                   
+                   if targetHrp and targetHead then
+                       for _, part in ipairs(localPlayer.Character:GetDescendants()) do
+                           if part:IsA("BasePart") then part.CanCollide = false end
+                       end
+                       
+                       myHrp.CFrame = targetHrp.CFrame * CFrame.new(0, 3.5, 0)
+                       myHrp.Velocity = Vector3.new(0, 0, 0)
+                       Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, targetHead.Position)
+                   end
+               end
+           end
+       end)
+   end
 
    local viewportSize = Camera.ViewportSize  
    local center = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)  
 
    -- Handle FOV Rendering  
-   if Settings.CircleEnabled then  
-       if Settings.UseBoxFOV then  
-           if FOVCircle then FOVCircle.Visible = false end  
-           local w, h = Settings.BoxWidth, Settings.BoxHeight  
-           local topLeft = Vector2.new(center.X - w/2, center.Y - h/2)  
-           local topRight = Vector2.new(center.X + w/2, center.Y - h/2)  
-           local bottomLeft = Vector2.new(center.X - w/2, center.Y + h/2)  
-           local bottomRight = Vector2.new(center.X + w/2, center.Y + h/2)  
+   pcall(function()
+       if Settings.CircleEnabled then  
+           if Settings.UseBoxFOV then  
+               if FOVCircle then FOVCircle.Visible = false end  
+               local w, h = Settings.BoxWidth, Settings.BoxHeight  
+               local topLeft = Vector2.new(center.X - w/2, center.Y - h/2)  
+               local topRight = Vector2.new(center.X + w/2, center.Y - h/2)  
+               local bottomLeft = Vector2.new(center.X - w/2, center.Y + h/2)  
+               local bottomRight = Vector2.new(center.X + w/2, center.Y + h/2)  
 
-           if RectLines.Top then  
-               RectLines.Top.From = topLeft; RectLines.Top.To = topRight; RectLines.Top.Visible = true  
-               RectLines.Bottom.From = bottomLeft; RectLines.Bottom.To = bottomRight; RectLines.Bottom.Visible = true  
-               RectLines.Left.From = topLeft; RectLines.Left.To = bottomLeft; RectLines.Left.Visible = true  
-               RectLines.Right.From = topRight; RectLines.Right.To = bottomRight; RectLines.Right.Visible = true  
+               if RectLines.Top then  
+                   RectLines.Top.From = topLeft; RectLines.Top.To = topRight; RectLines.Top.Visible = true  
+                   RectLines.Bottom.From = bottomLeft; RectLines.Bottom.To = bottomRight; RectLines.Bottom.Visible = true  
+                   RectLines.Left.From = topLeft; RectLines.Left.To = bottomLeft; RectLines.Left.Visible = true  
+                   RectLines.Right.From = topRight; RectLines.Right.To = bottomRight; RectLines.Right.Visible = true  
+               end  
+           else  
+               for _, line in pairs(RectLines) do line.Visible = false end  
+               if FOVCircle then  
+                   FOVCircle.Position = center  
+                   FOVCircle.Radius = Settings.Radius  
+                   FOVCircle.Visible = true  
+               end  
            end  
        else  
+           if FOVCircle then FOVCircle.Visible = false end  
            for _, line in pairs(RectLines) do line.Visible = false end  
-           if FOVCircle then  
-               FOVCircle.Position = center  
-               FOVCircle.Radius = Settings.Radius  
-               FOVCircle.Visible = true  
-           end  
        end  
-   else  
-       if FOVCircle then FOVCircle.Visible = false end  
-       for _, line in pairs(RectLines) do line.Visible = false end  
-   end  
+   end)
 
    -- Target Acquisition Logic  
-   if Settings.CircleEnabled or Settings.ShootButtonEnabled then  
-       local ClosestPlayer = nil  
-       local ShortestDist = math.huge  
+   pcall(function()
+       if Settings.CircleEnabled or Settings.ShootButtonEnabled then  
+           local ClosestPlayer = nil  
+           local ShortestDist = math.huge  
 
-       for _, player in ipairs(Players:GetPlayers()) do  
-           if player ~= localPlayer and player.Character then  
-               local targetPart = GetTargetPart(player.Character)  
-               local humanoid = player.Character:FindFirstChild("Humanoid")  
-
-               if targetPart and humanoid and humanoid.Health > 0 then  
-                   if not (Settings.TeamCheck and player.Team == localPlayer.Team) then  
+           for _, player in ipairs(Players:GetPlayers()) do  
+               if IsValidTarget(player) then  
+                   local targetPart = GetTargetPart(player.Character)  
+                   if targetPart then  
                        local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)  
                        if onScreen then  
                            local targetVec = Vector2.new(screenPos.X, screenPos.Y)  
@@ -334,19 +392,18 @@ RunService:BindToRenderStep("SitomanEngine", Enum.RenderPriority.Camera.Value + 
                    end  
                end  
            end  
+           Settings.Target = ClosestPlayer  
+       else  
+           Settings.Target = nil  
        end  
-       Settings.Target = ClosestPlayer  
-   else  
-       Settings.Target = nil  
-   end  
 
-   -- Camera Hard Lock Yang Melekat Serta-Merta (Snap Lock) ke Kepala
-   if Settings.Target and Settings.Target.Character then  
-       local targetPart = GetTargetPart(Settings.Target.Character)  
-       if targetPart then  
-           Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, targetPart.Position)  
-       end  
-   end
+       if Settings.Target and Settings.Target.Character then  
+           local targetPart = GetTargetPart(Settings.Target.Character)  
+           if targetPart then  
+               Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, targetPart.Position)  
+           end  
+       end
+   end)
 end)
 
 -- --- UI COMPONENT GENERATORS ---
@@ -365,7 +422,13 @@ local function CreateToggleButton(text, defaultState, callback)
        state = not state  
        Btn.BackgroundColor3 = state and Color3.fromRGB(230, 35, 35) or Color3.fromRGB(40, 40, 40)  
        Btn.Text = text .. (state and " (ON)" or " (OFF)")  
-       callback(state)  
+       
+       local success, err = pcall(function()
+           callback(state)
+       end)
+       if not success then
+           warn("Callback Error: " .. tostring(err))
+       end
    end)  
    return Btn
 end
@@ -396,7 +459,7 @@ local function CreateSlider(text, min, max, default, callback)
        SliderFill.Size = UDim2.new(percentage, 0, 1, 0)  
        local value = math.floor(min + (percentage * (max - min)))  
        Label.Text = text .. ": " .. value  
-       callback(value)  
+       pcall(function() callback(value) end)  
    end  
 
    local dragging = false  
@@ -421,9 +484,9 @@ local function CreateSlider(text, min, max, default, callback)
 end
 
 -- --- CONSTRUCT FEATURES ---
+CreateToggleButton("Auto Kill (Auto Farm)", false, function(v) Settings.AutoKill = v end)
 CreateToggleButton("Target Lock Active", false, function(v) Settings.CircleEnabled = v end)
 CreateToggleButton("Use Rectangular FOV", true, function(v) Settings.UseBoxFOV = v end)
-CreateToggleButton("Team Check", false, function(v) Settings.TeamCheck = v end)
 CreateSlider("Circle Radius", 50, 800, 200, function(v) Settings.Radius = v end)
 CreateSlider("Box Width", 50, 500, 150, function(v) Settings.BoxWidth = v end)
 CreateSlider("Box Height", 100, 800, 300, function(v) Settings.BoxHeight = v end)
@@ -470,7 +533,7 @@ local function toggleUI()
        ToggleButton.Visible = false  
 
        local openTween = TweenService:Create(MainFrame, TweenInfo.new(0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {  
-           Size = UDim2.new(0, 280, 0, 400)  
+           Size = UDim2.new(0, 280, 0, 380)  
        })  
        openTween:Play()  
        animateHeader()  
@@ -522,3 +585,4 @@ end
 
 MakeDraggable(MainFrame)
 MakeDraggable(ToggleButton)
+
