@@ -266,6 +266,80 @@ local function UpdateHitboxes()
    end)
 end
 
+-- --- INTEGRATED AUTO FARM / AUTO KILL LOGIC ---
+local function RunAutoFarmRoutine()
+    local function GetClosestTarget()
+        local bestTarget = nil
+        local minDist = math.huge
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= localPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                local dist = (localPlayer.Character.HumanoidRootPart.Position - p.Character.HumanoidRootPart.Position).magnitude
+                if dist < minDist then
+                    minDist = dist
+                    bestTarget = p
+                end
+            end
+        end
+        return bestTarget
+    end
+
+    local function LookAtTarget(target)
+        while Settings.AutoKill and target and target.Character and target.Character:FindFirstChild("Humanoid") and target.Character.Humanoid.Health > 0 do
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Character.HumanoidRootPart.Position)
+            RunService.RenderStepped:Wait()
+        end
+    end
+
+    local function OrbitTarget(target)
+        local radius = 6
+        local height = 8
+        local speed = 0.1
+        while Settings.AutoKill and target and target.Character and target.Character:FindFirstChild("Humanoid") and target.Character.Humanoid.Health > 0 do
+            for theta = 0, math.pi * 2, speed do
+                if not Settings.AutoKill then break end
+                local cx = math.cos(theta) * radius
+                local cz = math.sin(theta) * radius
+                local ty = target.Character.HumanoidRootPart.Position.Y + height
+                if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    localPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(target.Character.HumanoidRootPart.Position + Vector3.new(cx, ty - target.Character.HumanoidRootPart.Position.Y, cz), target.Character.HumanoidRootPart.Position)
+                end
+                RunService.RenderStepped:Wait()
+            end
+        end
+    end
+
+    for i = 1, 5 do
+        if not Settings.AutoKill then break end
+        local t = GetClosestTarget()
+        if t then
+            task.spawn(function() LookAtTarget(t) end)
+            task.spawn(function() OrbitTarget(t) end)
+            task.wait(3)
+            if t.Character and t.Character:FindFirstChild("Humanoid") then
+                local hum = t.Character.Humanoid
+                local conn
+                conn = hum.Died:Connect(function()
+                    if conn then conn:Disconnect() end
+                    task.wait(5)
+                end)
+                while Settings.AutoKill and hum.Health > 0 do
+                    task.wait(0.5)
+                end
+                if conn then conn:Disconnect() end
+            end
+        end
+    end
+end
+
+task.spawn(function()
+    while true do
+        if Settings.AutoKill then
+            RunAutoFarmRoutine()
+        end
+        task.wait(1)
+    end
+end)
+
 -- --- MAIN RENDER LOOP & CHROMA ---
 local SliderFillsList = {}
 
@@ -287,42 +361,6 @@ RunService:BindToRenderStep("SitomanEngine", Enum.RenderPriority.Camera.Value + 
 
    UpdateESP()  
    UpdateHitboxes()  
-
-   -- --- AUTO KILL / AUTO FARM LOGIC (NOCLIP DIBUANG) ---
-   if Settings.AutoKill then
-       pcall(function()
-           if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
-               local myHrp = localPlayer.Character.HumanoidRootPart
-               local closestTarget = nil
-               local shortestDist = math.huge
-
-               for _, player in ipairs(Players:GetPlayers()) do
-                   if IsValidTarget(player) then
-                       local targetHrp = player.Character:FindFirstChild("HumanoidRootPart")
-                       if targetHrp then
-                           local dist = (targetHrp.Position - myHrp.Position).Magnitude
-                           if dist < shortestDist then
-                               closestTarget = player
-                               shortestDist = dist
-                           end
-                       end
-                   end
-               end
-
-               if closestTarget and closestTarget.Character then
-                   local targetHead = closestTarget.Character:FindFirstChild("Head")
-                   local targetHrp = closestTarget.Character:FindFirstChild("HumanoidRootPart")
-                   
-                   if targetHrp and targetHead then
-                       -- Bahagian noclip dibuang sepenuhnya di sini
-                       myHrp.CFrame = targetHrp.CFrame * CFrame.new(0, 3.5, 0)
-                       myHrp.Velocity = Vector3.new(0, 0, 0)
-                       Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, targetHead.Position)
-                   end
-               end
-           end
-       end)
-   end
 
    local viewportSize = Camera.ViewportSize  
    local center = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)  
