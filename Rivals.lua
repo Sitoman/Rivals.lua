@@ -1,3 +1,4 @@
+
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local RunService = game:GetService("RunService")
@@ -80,13 +81,10 @@ end)
 
 -- --- ENGINE STATE ---
 local Settings = {
-   AutoKill = false,
    CircleEnabled = false,
-   ShootButtonEnabled = false,
+   SilentAimEnabled = false, -- Selamat tanpa metatable hook
+   InfiniteJumpEnabled = false,
    Radius = 200,
-   BoxWidth = 150,
-   BoxHeight = 300,
-   UseBoxFOV = true,
    ESPEnabled = false,
    Target = nil,
    DebugHitboxes = false,
@@ -97,7 +95,7 @@ local Settings = {
 local DebugHitboxes = Settings.DebugHitboxes
 local HitboxSize = Settings.HitboxSize
 
--- Circular FOV Drawing (Safe Check)
+-- Circular FOV Drawing (Red Circle)
 local FOVCircle = nil
 pcall(function()
    if Drawing then
@@ -106,29 +104,30 @@ pcall(function()
        FOVCircle.NumSides = 64
        FOVCircle.Radius = Settings.Radius
        FOVCircle.Filled = false
-       FOVCircle.Visible = false
+       FOVCircle.Visible = true
+       FOVCircle.Color = Color3.fromRGB(255, 0, 0)
    end
 end)
 
--- FOV Rect Lines (Safe Check)
-local RectLines = {}
+-- Crosshair Beranimasi di Tengah Skrin
+local CrosshairLines = {}
 pcall(function()
-   if Drawing then
-       RectLines = {
-           Top = Drawing.new("Line"),
-           Bottom = Drawing.new("Line"),
-           Left = Drawing.new("Line"),
-           Right = Drawing.new("Line")
-       }
-       for _, line in pairs(RectLines) do
-           line.Thickness = 2
-           line.Visible = false
-       end
-   end
+    if Drawing then
+        CrosshairLines = {
+            Top = Drawing.new("Line"),
+            Bottom = Drawing.new("Line"),
+            Left = Drawing.new("Line"),
+            Right = Drawing.new("Line")
+        }
+        for _, line in pairs(CrosshairLines) do
+            line.Thickness = 2
+            line.Visible = true
+        end
+    end
 end)
 
 local function GetTargetPart(character)
-   return character:FindFirstChild("Head")
+   return character:FindFirstChild("Head") or character:FindFirstChild("HumanoidRootPart")
 end
 
 local function IsValidTarget(player)
@@ -142,6 +141,18 @@ local function IsValidTarget(player)
    
    return true
 end
+
+-- --- INFINITE JUMP CONTROLLER ---
+UserInputService.JumpRequest:Connect(function()
+    if Settings.InfiniteJumpEnabled then
+        pcall(function()
+            local char = localPlayer.Character
+            if char and char:FindFirstChildOfClass("Humanoid") then
+                char.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+        end)
+    end
+end)
 
 -- --- RTX SHADER CONTROLLER ---
 local RTXStorage = { CreatedInstances = {}, OriginalSettings = {} }
@@ -266,84 +277,11 @@ local function UpdateHitboxes()
    end)
 end
 
--- --- INTEGRATED AUTO FARM / AUTO KILL LOGIC ---
-local function RunAutoFarmRoutine()
-    local function GetClosestTarget()
-        local bestTarget = nil
-        local minDist = math.huge
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p ~= localPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                local dist = (localPlayer.Character.HumanoidRootPart.Position - p.Character.HumanoidRootPart.Position).magnitude
-                if dist < minDist then
-                    minDist = dist
-                    bestTarget = p
-                end
-            end
-        end
-        return bestTarget
-    end
-
-    local function LookAtTarget(target)
-        while Settings.AutoKill and target and target.Character and target.Character:FindFirstChild("Humanoid") and target.Character.Humanoid.Health > 0 do
-            Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Character.HumanoidRootPart.Position)
-            RunService.RenderStepped:Wait()
-        end
-    end
-
-    local function OrbitTarget(target)
-        local radius = 6
-        local height = 8
-        local speed = 0.1
-        while Settings.AutoKill and target and target.Character and target.Character:FindFirstChild("Humanoid") and target.Character.Humanoid.Health > 0 do
-            for theta = 0, math.pi * 2, speed do
-                if not Settings.AutoKill then break end
-                local cx = math.cos(theta) * radius
-                local cz = math.sin(theta) * radius
-                local ty = target.Character.HumanoidRootPart.Position.Y + height
-                if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    localPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(target.Character.HumanoidRootPart.Position + Vector3.new(cx, ty - target.Character.HumanoidRootPart.Position.Y, cz), target.Character.HumanoidRootPart.Position)
-                end
-                RunService.RenderStepped:Wait()
-            end
-        end
-    end
-
-    for i = 1, 5 do
-        if not Settings.AutoKill then break end
-        local t = GetClosestTarget()
-        if t then
-            task.spawn(function() LookAtTarget(t) end)
-            task.spawn(function() OrbitTarget(t) end)
-            task.wait(3)
-            if t.Character and t.Character:FindFirstChild("Humanoid") then
-                local hum = t.Character.Humanoid
-                local conn
-                conn = hum.Died:Connect(function()
-                    if conn then conn:Disconnect() end
-                    task.wait(5)
-                end)
-                while Settings.AutoKill and hum.Health > 0 do
-                    task.wait(0.5)
-                end
-                if conn then conn:Disconnect() end
-            end
-        end
-    end
-end
-
-task.spawn(function()
-    while true do
-        if Settings.AutoKill then
-            RunAutoFarmRoutine()
-        end
-        task.wait(1)
-    end
-end)
-
 -- --- MAIN RENDER LOOP & CHROMA ---
 local SliderFillsList = {}
+local tickCounter = 0
 
-RunService:BindToRenderStep("SitomanEngine", Enum.RenderPriority.Camera.Value + 1, function()
+RunService:BindToRenderStep("SitomanEngine", Enum.RenderPriority.Camera.Value + 1, function(dt)
    local hue = (tick() * 0.4) % 1
    local rgbColor = Color3.fromHSV(hue, 0.8, 1)
 
@@ -351,8 +289,7 @@ RunService:BindToRenderStep("SitomanEngine", Enum.RenderPriority.Camera.Value + 
        MainStroke.Color = rgbColor  
        HeaderText.TextColor3 = rgbColor  
        ToggleButton.BackgroundColor3 = rgbColor  
-       if FOVCircle then FOVCircle.Color = rgbColor end  
-       for _, line in pairs(RectLines) do line.Color = rgbColor end  
+       for _, line in pairs(CrosshairLines) do line.Color = rgbColor end
 
        for _, fill in ipairs(SliderFillsList) do  
            if fill and fill.Parent then fill.BackgroundColor3 = rgbColor end  
@@ -365,40 +302,43 @@ RunService:BindToRenderStep("SitomanEngine", Enum.RenderPriority.Camera.Value + 
    local viewportSize = Camera.ViewportSize  
    local center = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)  
 
-   -- Handle FOV Rendering  
+   -- Animasi Crosshair di Tengah Skrin
    pcall(function()
-       if Settings.CircleEnabled then  
-           if Settings.UseBoxFOV then  
-               if FOVCircle then FOVCircle.Visible = false end  
-               local w, h = Settings.BoxWidth, Settings.BoxHeight  
-               local topLeft = Vector2.new(center.X - w/2, center.Y - h/2)  
-               local topRight = Vector2.new(center.X + w/2, center.Y - h/2)  
-               local bottomLeft = Vector2.new(center.X - w/2, center.Y + h/2)  
-               local bottomRight = Vector2.new(center.X + w/2, center.Y + h/2)  
+       tickCounter = tickCounter + (dt * 10)
+       local animOffset = math.sin(tickCounter) * 3 + 12
+       local length = 8
 
-               if RectLines.Top then  
-                   RectLines.Top.From = topLeft; RectLines.Top.To = topRight; RectLines.Top.Visible = true  
-                   RectLines.Bottom.From = bottomLeft; RectLines.Bottom.To = bottomRight; RectLines.Bottom.Visible = true  
-                   RectLines.Left.From = topLeft; RectLines.Left.To = bottomLeft; RectLines.Left.Visible = true  
-                   RectLines.Right.From = topRight; RectLines.Right.To = bottomRight; RectLines.Right.Visible = true  
-               end  
-           else  
-               for _, line in pairs(RectLines) do line.Visible = false end  
-               if FOVCircle then  
-                   FOVCircle.Position = center  
-                   FOVCircle.Radius = Settings.Radius  
-                   FOVCircle.Visible = true  
-               end  
+       if CrosshairLines.Top then
+           CrosshairLines.Top.From = Vector2.new(center.X, center.Y - animOffset - length)
+           CrosshairLines.Top.To = Vector2.new(center.X, center.Y - animOffset)
+
+           CrosshairLines.Bottom.From = Vector2.new(center.X, center.Y + animOffset)
+           CrosshairLines.Bottom.To = Vector2.new(center.X, center.Y + animOffset + length)
+
+           CrosshairLines.Left.From = Vector2.new(center.X - animOffset - length, center.Y)
+           CrosshairLines.Left.To = Vector2.new(center.X - animOffset, center.Y)
+
+           CrosshairLines.Right.From = Vector2.new(center.X + animOffset, center.Y)
+           CrosshairLines.Right.To = Vector2.new(center.X + animOffset + length, center.Y)
+       end
+   end)
+
+   -- Handle FOV Rendering (Bulatan Merah)
+   pcall(function()
+       if Settings.CircleEnabled or Settings.SilentAimEnabled then  
+           if FOVCircle then  
+               FOVCircle.Position = center  
+               FOVCircle.Radius = Settings.Radius  
+               FOVCircle.Visible = true  
            end  
        else  
            if FOVCircle then FOVCircle.Visible = false end  
-           for _, line in pairs(RectLines) do line.Visible = false end  
        end  
    end)
 
-   -- Target Acquisition Logic  
+   -- Target Acquisition Logic (Mencari musuh terdekat dalam bulatan FOV)
    pcall(function()
-       if Settings.CircleEnabled or Settings.ShootButtonEnabled then  
+       if Settings.CircleEnabled or Settings.SilentAimEnabled then  
            local ClosestPlayer = nil  
            local ShortestDist = math.huge  
 
@@ -410,13 +350,7 @@ RunService:BindToRenderStep("SitomanEngine", Enum.RenderPriority.Camera.Value + 
                        if onScreen then  
                            local targetVec = Vector2.new(screenPos.X, screenPos.Y)  
                            local diff = targetVec - center  
-
-                           local insideFOV = false  
-                           if Settings.UseBoxFOV then  
-                               insideFOV = math.abs(diff.X) <= (Settings.BoxWidth / 2) and math.abs(diff.Y) <= (Settings.BoxHeight / 2)  
-                           else  
-                               insideFOV = diff.Magnitude <= Settings.Radius  
-                           end  
+                           local insideFOV = diff.Magnitude <= Settings.Radius  
 
                            if insideFOV and diff.Magnitude < ShortestDist then  
                                ClosestPlayer = player  
@@ -431,10 +365,14 @@ RunService:BindToRenderStep("SitomanEngine", Enum.RenderPriority.Camera.Value + 
            Settings.Target = nil  
        end  
 
-       if Settings.Target and Settings.Target.Character then  
+       -- Target Lock / Silent Aim (Mengunci sasaran secara automatik bila menembak/aktif)
+       if (Settings.CircleEnabled or Settings.SilentAimEnabled) and Settings.Target and Settings.Target.Character then  
            local targetPart = GetTargetPart(Settings.Target.Character)  
            if targetPart then  
-               Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, targetPart.Position)  
+               -- Jika butang tembak ditekan atau Silent Aim aktif, hala ke musuh dengan lancar
+               if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) or UserInputService.TouchEnabled then
+                   Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, targetPart.Position)
+               end
            end  
        end
    end)
@@ -457,12 +395,9 @@ local function CreateToggleButton(text, defaultState, callback)
        Btn.BackgroundColor3 = state and Color3.fromRGB(230, 35, 35) or Color3.fromRGB(40, 40, 40)  
        Btn.Text = text .. (state and " (ON)" or " (OFF)")  
        
-       local success, err = pcall(function()
+       pcall(function()
            callback(state)
        end)
-       if not success then
-           warn("Callback Error: " .. tostring(err))
-       end
    end)  
    return Btn
 end
@@ -518,12 +453,10 @@ local function CreateSlider(text, min, max, default, callback)
 end
 
 -- --- CONSTRUCT FEATURES ---
-CreateToggleButton("Auto Kill (Auto Farm)", false, function(v) Settings.AutoKill = v end)
 CreateToggleButton("Target Lock Active", false, function(v) Settings.CircleEnabled = v end)
-CreateToggleButton("Use Rectangular FOV", true, function(v) Settings.UseBoxFOV = v end)
-CreateSlider("Circle Radius", 50, 800, 200, function(v) Settings.Radius = v end)
-CreateSlider("Box Width", 50, 500, 150, function(v) Settings.BoxWidth = v end)
-CreateSlider("Box Height", 100, 800, 300, function(v) Settings.BoxHeight = v end)
+CreateToggleButton("Silent Aim [ON]", false, function(v) Settings.SilentAimEnabled = v end)
+CreateToggleButton("Infinite Jump", false, function(v) Settings.InfiniteJumpEnabled = v end)
+CreateSlider("Circle Radius / FOV", 50, 800, 200, function(v) Settings.Radius = v end)
 
 CreateToggleButton("Player ESP", false, function(v) Settings.ESPEnabled = v end)
 CreateToggleButton("Debug Hitboxes", false, function(v)
