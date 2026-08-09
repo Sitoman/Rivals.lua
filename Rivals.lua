@@ -1,4 +1,3 @@
-
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local RunService = game:GetService("RunService")
@@ -12,10 +11,14 @@ local Camera = workspace.CurrentCamera
 -- GUI Base Parent Fallback
 local parentGui = CoreGui:FindFirstChild("RobloxGui") or localPlayer:WaitForChild("PlayerGui")
 
--- Clean up pre-existing instances
+-- Clean up pre-existing instances & connections
 if parentGui:FindFirstChild("SitomanStudioHub") then
    parentGui.SitomanStudioHub:Destroy()
 end
+
+pcall(function()
+    RunService:UnbindFromRenderStep("SitomanEngine")
+end)
 
 local PhantomUI = Instance.new("ScreenGui", parentGui)
 PhantomUI.Name = "SitomanStudioHub"
@@ -81,9 +84,8 @@ end)
 
 -- --- ENGINE STATE ---
 local Settings = {
-   CircleEnabled = false,
-   SilentAimEnabled = false, -- Selamat tanpa metatable hook
-   InfiniteJumpEnabled = false,
+   SpeedEnabled = false,
+   SpeedValue = 16,
    Radius = 200,
    ESPEnabled = false,
    Target = nil,
@@ -95,7 +97,7 @@ local Settings = {
 local DebugHitboxes = Settings.DebugHitboxes
 local HitboxSize = Settings.HitboxSize
 
--- Circular FOV Drawing (Red Circle)
+-- Circular FOV Drawing
 local FOVCircle = nil
 pcall(function()
    if Drawing then
@@ -104,12 +106,12 @@ pcall(function()
        FOVCircle.NumSides = 64
        FOVCircle.Radius = Settings.Radius
        FOVCircle.Filled = false
-       FOVCircle.Visible = true
+       FOVCircle.Visible = false
        FOVCircle.Color = Color3.fromRGB(255, 0, 0)
    end
 end)
 
--- Crosshair Beranimasi di Tengah Skrin
+-- Crosshair Drawing
 local CrosshairLines = {}
 pcall(function()
     if Drawing then
@@ -121,34 +123,50 @@ pcall(function()
         }
         for _, line in pairs(CrosshairLines) do
             line.Thickness = 2
-            line.Visible = true
+            line.Visible = false
         end
     end
 end)
 
 local function GetTargetPart(character)
-   return character:FindFirstChild("Head") or character:FindFirstChild("HumanoidRootPart")
+   return character and (character:FindFirstChild("Head") or character:FindFirstChild("HumanoidRootPart"))
 end
 
 local function IsValidTarget(player)
-   if player == localPlayer then return false end
-   if not player.Character then return false end
-   
-   local humanoid = player.Character:FindFirstChild("Humanoid")
+   if player == localPlayer or not player.Character then return false end
+   local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
    local targetHrp = player.Character:FindFirstChild("HumanoidRootPart")
-   
    if not humanoid or not targetHrp or humanoid.Health <= 0 then return false end
-   
    return true
 end
 
--- --- INFINITE JUMP CONTROLLER ---
-UserInputService.JumpRequest:Connect(function()
-    if Settings.InfiniteJumpEnabled then
+-- Fungsi semak status match/lobby berdasarkan WaitingArea
+local function IsInGame()
+    if workspace:FindFirstChild("WaitingArea") then
+        return false
+    end
+    
+    if workspace:FindFirstChild("Map") or workspace:FindFirstChild("Arena") then
+        return true
+    end
+    
+    return false
+end
+
+-- --- SPEED CONTROLLER ---
+RunService.Stepped:Connect(function()
+    if Settings.SpeedEnabled then
         pcall(function()
             local char = localPlayer.Character
-            if char and char:FindFirstChildOfClass("Humanoid") then
-                char.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+            if char then
+                local humanoid = char:FindFirstChildOfClass("Humanoid")
+                local hrp = char:FindFirstChild("HumanoidRootPart")
+                if humanoid and hrp then
+                    local moveDir = humanoid.MoveDirection
+                    if moveDir.Magnitude > 0 then
+                        hrp.CFrame = hrp.CFrame + (moveDir * (Settings.SpeedValue / 50))
+                    end
+                end
             end
         end)
     end
@@ -302,13 +320,15 @@ RunService:BindToRenderStep("SitomanEngine", Enum.RenderPriority.Camera.Value + 
    local viewportSize = Camera.ViewportSize  
    local center = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)  
 
-   -- Animasi Crosshair di Tengah Skrin
+   -- Animasi Crosshair
    pcall(function()
        tickCounter = tickCounter + (dt * 10)
        local animOffset = math.sin(tickCounter) * 3 + 12
        local length = 8
 
        if CrosshairLines.Top then
+           for _, line in pairs(CrosshairLines) do line.Visible = true end
+           
            CrosshairLines.Top.From = Vector2.new(center.X, center.Y - animOffset - length)
            CrosshairLines.Top.To = Vector2.new(center.X, center.Y - animOffset)
 
@@ -323,9 +343,12 @@ RunService:BindToRenderStep("SitomanEngine", Enum.RenderPriority.Camera.Value + 
        end
    end)
 
-   -- Handle FOV Rendering (Bulatan Merah)
+   -- Semak status Auto Match / Lobby
+   local inMatch = IsInGame()
+
+   -- Handle FOV Rendering (Hanya paparkan FOV jika di dalam match)
    pcall(function()
-       if Settings.CircleEnabled or Settings.SilentAimEnabled then  
+       if inMatch then  
            if FOVCircle then  
                FOVCircle.Position = center  
                FOVCircle.Radius = Settings.Radius  
@@ -336,9 +359,9 @@ RunService:BindToRenderStep("SitomanEngine", Enum.RenderPriority.Camera.Value + 
        end  
    end)
 
-   -- Target Acquisition Logic (Mencari musuh terdekat dalam bulatan FOV)
+   -- Target Acquisition Logic (Auto Lock dalam match, bebas di WaitingArea)
    pcall(function()
-       if Settings.CircleEnabled or Settings.SilentAimEnabled then  
+       if inMatch then  
            local ClosestPlayer = nil  
            local ShortestDist = math.huge  
 
@@ -350,12 +373,13 @@ RunService:BindToRenderStep("SitomanEngine", Enum.RenderPriority.Camera.Value + 
                        if onScreen then  
                            local targetVec = Vector2.new(screenPos.X, screenPos.Y)  
                            local diff = targetVec - center  
-                           local insideFOV = diff.Magnitude <= Settings.Radius  
-
-                           if insideFOV and diff.Magnitude < ShortestDist then  
-                               ClosestPlayer = player  
-                               ShortestDist = diff.Magnitude  
-                           end  
+                           
+                           if diff.Magnitude <= Settings.Radius then
+                               if diff.Magnitude < ShortestDist then  
+                                   ClosestPlayer = player  
+                                   ShortestDist = diff.Magnitude
+                               end
+                           end
                        end  
                    end  
                end  
@@ -365,14 +389,11 @@ RunService:BindToRenderStep("SitomanEngine", Enum.RenderPriority.Camera.Value + 
            Settings.Target = nil  
        end  
 
-       -- Target Lock / Silent Aim (Mengunci sasaran secara automatik bila menembak/aktif)
-       if (Settings.CircleEnabled or Settings.SilentAimEnabled) and Settings.Target and Settings.Target.Character then  
+       -- Target Lock (Kamera ikut musuh secara automatik hanya dalam match)
+       if inMatch and Settings.Target and Settings.Target.Character then  
            local targetPart = GetTargetPart(Settings.Target.Character)  
            if targetPart then  
-               -- Jika butang tembak ditekan atau Silent Aim aktif, hala ke musuh dengan lancar
-               if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) or UserInputService.TouchEnabled then
-                   Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, targetPart.Position)
-               end
+               Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, targetPart.Position)
            end  
        end
    end)
@@ -453,9 +474,8 @@ local function CreateSlider(text, min, max, default, callback)
 end
 
 -- --- CONSTRUCT FEATURES ---
-CreateToggleButton("Target Lock Active", false, function(v) Settings.CircleEnabled = v end)
-CreateToggleButton("Silent Aim [ON]", false, function(v) Settings.SilentAimEnabled = v end)
-CreateToggleButton("Infinite Jump", false, function(v) Settings.InfiniteJumpEnabled = v end)
+CreateToggleButton("Speed [ON]", false, function(v) Settings.SpeedEnabled = v end)
+CreateSlider("Speed Value", 16, 200, 16, function(v) Settings.SpeedValue = v end)
 CreateSlider("Circle Radius / FOV", 50, 800, 200, function(v) Settings.Radius = v end)
 
 CreateToggleButton("Player ESP", false, function(v) Settings.ESPEnabled = v end)
@@ -500,7 +520,7 @@ local function toggleUI()
        ToggleButton.Visible = false  
 
        local openTween = TweenService:Create(MainFrame, TweenInfo.new(0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {  
-           Size = UDim2.new(0, 280, 0, 380)  
+           Size = UDim2.new(0, 280, 0, 500)  
        })  
        openTween:Play()  
        animateHeader()  
@@ -552,3 +572,4 @@ end
 
 MakeDraggable(MainFrame)
 MakeDraggable(ToggleButton)
+
