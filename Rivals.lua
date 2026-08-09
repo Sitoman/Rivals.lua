@@ -1,5 +1,3 @@
-
-
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local RunService = game:GetService("RunService")
@@ -94,7 +92,7 @@ local Settings = {
    DebugHitboxes = false,
    HitboxSize = 5,
    RTXEnabled = false,
-   TargetLockEnabled = false -- Tambahan untuk Target Lock
+   TargetLockEnabled = false
 }
 
 local DebugHitboxes = Settings.DebugHitboxes
@@ -391,7 +389,6 @@ RunService:BindToRenderStep("SitomanEngine", Enum.RenderPriority.Camera.Value + 
            Settings.Target = nil  
        end  
 
-       -- Target Lock (Hanya ikut musuh jika dalam match, butang lock ON, dan ada sasaran)
        if inMatch and Settings.TargetLockEnabled and Settings.Target and Settings.Target.Character then  
            local targetPart = GetTargetPart(Settings.Target.Character)  
            if targetPart then  
