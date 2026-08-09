@@ -91,7 +91,8 @@ local Settings = {
    Target = nil,
    DebugHitboxes = false,
    HitboxSize = 5,
-   RTXEnabled = false
+   RTXEnabled = false,
+   TargetLockEnabled = false -- Tambahan untuk Target Lock
 }
 
 local DebugHitboxes = Settings.DebugHitboxes
@@ -140,17 +141,20 @@ local function IsValidTarget(player)
    return true
 end
 
--- Fungsi semak status match/lobby berdasarkan WaitingArea
+-- --- FUNGSI DETEKSI BERDASARKAN VISIBILITI BUTANG PLAY ---
 local function IsInGame()
-    if workspace:FindFirstChild("WaitingArea") then
-        return false
+    local playerGui = localPlayer:FindFirstChild("PlayerGui")
+    if not playerGui then return true end
+
+    local playBtn = playerGui:FindFirstChild("Play", true) 
+
+    if playBtn and playBtn:IsA("GuiButton") then
+        if playBtn.Visible == true and playBtn.AbsoluteSize.X > 0 and playBtn.AbsolutePosition.Y > 0 then
+            return false 
+        end
     end
     
-    if workspace:FindFirstChild("Map") or workspace:FindFirstChild("Arena") then
-        return true
-    end
-    
-    return false
+    return true
 end
 
 -- --- SPEED CONTROLLER ---
@@ -320,7 +324,6 @@ RunService:BindToRenderStep("SitomanEngine", Enum.RenderPriority.Camera.Value + 
    local viewportSize = Camera.ViewportSize  
    local center = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)  
 
-   -- Animasi Crosshair
    pcall(function()
        tickCounter = tickCounter + (dt * 10)
        local animOffset = math.sin(tickCounter) * 3 + 12
@@ -343,10 +346,8 @@ RunService:BindToRenderStep("SitomanEngine", Enum.RenderPriority.Camera.Value + 
        end
    end)
 
-   -- Semak status Auto Match / Lobby
    local inMatch = IsInGame()
 
-   -- Handle FOV Rendering (Hanya paparkan FOV jika di dalam match)
    pcall(function()
        if inMatch then  
            if FOVCircle then  
@@ -359,7 +360,6 @@ RunService:BindToRenderStep("SitomanEngine", Enum.RenderPriority.Camera.Value + 
        end  
    end)
 
-   -- Target Acquisition Logic (Auto Lock dalam match, bebas di WaitingArea)
    pcall(function()
        if inMatch then  
            local ClosestPlayer = nil  
@@ -389,8 +389,8 @@ RunService:BindToRenderStep("SitomanEngine", Enum.RenderPriority.Camera.Value + 
            Settings.Target = nil  
        end  
 
-       -- Target Lock (Kamera ikut musuh secara automatik hanya dalam match)
-       if inMatch and Settings.Target and Settings.Target.Character then  
+       -- Target Lock (Hanya ikut musuh jika dalam match, butang lock ON, dan ada sasaran)
+       if inMatch and Settings.TargetLockEnabled and Settings.Target and Settings.Target.Character then  
            local targetPart = GetTargetPart(Settings.Target.Character)  
            if targetPart then  
                Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, targetPart.Position)
@@ -489,6 +489,46 @@ CreateSlider("Hitbox Size", 2, 20, 5, function(v)
 end)
 CreateToggleButton("RTX Shaders", false, function(v) ToggleRTX(v) end)
 
+-- --- BUTANG TARGET LOCK DRAGGABLE (Di luar menu utama) ---
+local LockButton = Instance.new("TextButton", PhantomUI)
+LockButton.Size = UDim2.new(0, 120, 0, 40)
+LockButton.Position = UDim2.new(0, 80, 0, 20)
+LockButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+LockButton.Text = "Lock: OFF"
+LockButton.TextColor3 = Color3.new(1, 1, 1)
+LockButton.Font = Enum.Font.GothamBold
+LockButton.TextSize = 12
+Instance.new("UICorner", LockButton).CornerRadius = UDim.new(0, 8)
+Instance.new("UIStroke", LockButton).Color = Color3.fromRGB(255, 255, 255)
+
+local lockDragging, lockDragStart, lockStartPos
+LockButton.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        lockDragging = true
+        lockDragStart = input.Position
+        lockStartPos = LockButton.Position
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if lockDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - lockDragStart
+        LockButton.Position = UDim2.new(lockStartPos.X.Scale, lockStartPos.X.Offset + delta.X, lockStartPos.Y.Scale, lockStartPos.Y.Offset + delta.Y)
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        lockDragging = false
+    end
+end)
+
+LockButton.MouseButton1Click:Connect(function()
+    Settings.TargetLockEnabled = not Settings.TargetLockEnabled
+    LockButton.Text = Settings.TargetLockEnabled and "Lock: ON" or "Lock: OFF"
+    LockButton.BackgroundColor3 = Settings.TargetLockEnabled and Color3.fromRGB(230, 35, 35) or Color3.fromRGB(40, 40, 40)
+end)
+
 -- --- ANIMATED OPEN & CLOSE FLOW ---
 local isBusy = false
 
@@ -550,7 +590,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
    end
 end)
 
--- --- DRAGGING SYSTEM ---
+-- --- DRAGGING SYSTEM (Main Menu & S Toggle) ---
 local function MakeDraggable(obj)
    local drag, startPos, inputStart
    obj.InputBegan:Connect(function(i)
@@ -572,4 +612,5 @@ end
 
 MakeDraggable(MainFrame)
 MakeDraggable(ToggleButton)
+
 
