@@ -24,7 +24,59 @@ local PhantomUI = Instance.new("ScreenGui", parentGui)
 PhantomUI.Name = "SitomanStudioHub"
 PhantomUI.ResetOnSpawn = false
 
--- Main Frame
+-- --- FOV CIRCLE GUI BIASA ---
+local FOVGuiHolder = Instance.new("Frame", PhantomUI)
+FOVGuiHolder.Size = UDim2.new(0, 400, 0, 400)
+FOVGuiHolder.Position = UDim2.new(0.5, 0, 0.5, 0)
+FOVGuiHolder.AnchorPoint = Vector2.new(0.5, 0.5)
+FOVGuiHolder.BackgroundTransparency = 1
+FOVGuiHolder.Visible = true
+
+local FOVCircleFrame = Instance.new("Frame", FOVGuiHolder)
+FOVCircleFrame.Size = UDim2.new(0, 400, 0, 400)
+FOVCircleFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+FOVCircleFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+FOVCircleFrame.BackgroundTransparency = 1
+
+local UICircleCorner = Instance.new("UICorner", FOVCircleFrame)
+UICircleCorner.CornerRadius = UDim.new(1, 0)
+
+local UICircleStroke = Instance.new("UIStroke", FOVCircleFrame)
+UICircleStroke.Thickness = 2
+UICircleStroke.Color = Color3.fromRGB(255, 0, 0)
+
+-- --- ROTATING CUSTOM CROSSHAIR GUI (Dinaikkan sedikit ke atas) ---
+local CrosshairHolder = Instance.new("Frame", PhantomUI)
+CrosshairHolder.Size = UDim2.new(0, 60, 0, 60)
+-- DIBAIKI: Diturunkan sedikit jarak ke atas (dari -25 boleh adjust ikut kesesuaian kalau nak lagi atas/bawah)
+CrosshairHolder.Position = UDim2.new(0.5, 0, 0.5, -25)
+CrosshairHolder.AnchorPoint = Vector2.new(0.5, 0.5)
+CrosshairHolder.BackgroundTransparency = 1
+
+local CrosshairStrokes = {}
+for i = 1, 4 do
+    local Line = Instance.new("Frame", CrosshairHolder)
+    Line.Size = UDim2.new(0, 3, 0, 12)
+    Line.Position = UDim2.new(0.5, -1.5, 0.5, -6)
+    Line.AnchorPoint = Vector2.new(0.5, 0.5)
+    Line.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    Instance.new("UICorner", Line).CornerRadius = UDim.new(1, 0)
+    
+    if i == 1 then
+        Line.Position = UDim2.new(0.5, 0, 0.5, -16)
+    elseif i == 2 then
+        Line.Position = UDim2.new(0.5, 16, 0.5, 0)
+        Line.Rotation = 90
+    elseif i == 3 then
+        Line.Position = UDim2.new(0.5, 0, 0.5, 16)
+    elseif i == 4 then
+        Line.Position = UDim2.new(0.5, -16, 0.5, 0)
+        Line.Rotation = 90
+    end
+    table.insert(CrosshairStrokes, Line)
+end
+
+-- Main Frame UI
 local MainFrame = Instance.new("Frame", PhantomUI)
 MainFrame.Size = UDim2.new(0, 0, 0, 0)
 MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
@@ -92,42 +144,12 @@ local Settings = {
    DebugHitboxes = false,
    HitboxSize = 5,
    RTXEnabled = false,
-   TargetLockEnabled = false
+   TargetLockEnabled = false,
+   POVValue = 70
 }
 
 local DebugHitboxes = Settings.DebugHitboxes
 local HitboxSize = Settings.HitboxSize
-
--- Circular FOV Drawing
-local FOVCircle = nil
-pcall(function()
-   if Drawing then
-       FOVCircle = Drawing.new("Circle")
-       FOVCircle.Thickness = 2
-       FOVCircle.NumSides = 64
-       FOVCircle.Radius = Settings.Radius
-       FOVCircle.Filled = false
-       FOVCircle.Visible = false
-       FOVCircle.Color = Color3.fromRGB(255, 0, 0)
-   end
-end)
-
--- Crosshair Drawing
-local CrosshairLines = {}
-pcall(function()
-    if Drawing then
-        CrosshairLines = {
-            Top = Drawing.new("Line"),
-            Bottom = Drawing.new("Line"),
-            Left = Drawing.new("Line"),
-            Right = Drawing.new("Line")
-        }
-        for _, line in pairs(CrosshairLines) do
-            line.Thickness = 2
-            line.Visible = false
-        end
-    end
-end)
 
 local function GetTargetPart(character)
    return character and (character:FindFirstChild("Head") or character:FindFirstChild("HumanoidRootPart"))
@@ -141,39 +163,32 @@ local function IsValidTarget(player)
    return true
 end
 
--- --- FUNGSI DETEKSI BERDASARKAN VISIBILITI BUTANG PLAY ---
-local function IsInGame()
-    local playerGui = localPlayer:FindFirstChild("PlayerGui")
-    if not playerGui then return true end
-
-    local playBtn = playerGui:FindFirstChild("Play", true) 
-
-    if playBtn and playBtn:IsA("GuiButton") then
-        if playBtn.Visible == true and playBtn.AbsoluteSize.X > 0 and playBtn.AbsolutePosition.Y > 0 then
-            return false 
-        end
-    end
-    
-    return true
-end
-
 -- --- SPEED CONTROLLER ---
-RunService.Stepped:Connect(function()
-    if Settings.SpeedEnabled then
-        pcall(function()
-            local char = localPlayer.Character
-            if char then
-                local humanoid = char:FindFirstChildOfClass("Humanoid")
-                local hrp = char:FindFirstChild("HumanoidRootPart")
-                if humanoid and hrp then
-                    local moveDir = humanoid.MoveDirection
-                    if moveDir.Magnitude > 0 then
-                        hrp.CFrame = hrp.CFrame + (moveDir * (Settings.SpeedValue / 50))
+RunService.Heartbeat:Connect(function()
+    pcall(function()
+        local char = localPlayer.Character
+        if char then
+            local humanoid = char:FindFirstChildOfClass("Humanoid")
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if humanoid and hrp then
+                if Settings.SpeedEnabled then
+                    humanoid.WalkSpeed = Settings.SpeedValue
+                    
+                    if humanoid.MoveDirection.Magnitude > 0 then
+                        local currentVelocity = hrp.AssemblyLinearVelocity
+                        local moveDir = humanoid.MoveDirection
+                        hrp.AssemblyLinearVelocity = Vector3.new(
+                            moveDir.X * Settings.SpeedValue, 
+                            currentVelocity.Y, 
+                            moveDir.Z * Settings.SpeedValue
+                        )
                     end
+                else
+                    humanoid.WalkSpeed = 16
                 end
             end
-        end)
-    end
+        end
+    end)
 end)
 
 -- --- RTX SHADER CONTROLLER ---
@@ -301,7 +316,6 @@ end
 
 -- --- MAIN RENDER LOOP & CHROMA ---
 local SliderFillsList = {}
-local tickCounter = 0
 
 RunService:BindToRenderStep("SitomanEngine", Enum.RenderPriority.Camera.Value + 1, function(dt)
    local hue = (tick() * 0.4) % 1
@@ -311,11 +325,27 @@ RunService:BindToRenderStep("SitomanEngine", Enum.RenderPriority.Camera.Value + 
        MainStroke.Color = rgbColor  
        HeaderText.TextColor3 = rgbColor  
        ToggleButton.BackgroundColor3 = rgbColor  
-       for _, line in pairs(CrosshairLines) do line.Color = rgbColor end
+       UICircleStroke.Color = rgbColor
+       
+       for _, line in ipairs(CrosshairStrokes) do
+           line.BackgroundColor3 = rgbColor
+       end
 
        for _, fill in ipairs(SliderFillsList) do  
            if fill and fill.Parent then fill.BackgroundColor3 = rgbColor end  
        end  
+   end)
+
+   -- Animasi Putaran Crosshair
+   pcall(function()
+       CrosshairHolder.Rotation = (CrosshairHolder.Rotation + (dt * 120)) % 360
+   end)
+
+   -- Update POV Kamera
+   pcall(function()
+       if Camera then
+           Camera.FieldOfView = Settings.POVValue
+       end
    end)
 
    UpdateESP()  
@@ -324,72 +354,39 @@ RunService:BindToRenderStep("SitomanEngine", Enum.RenderPriority.Camera.Value + 
    local viewportSize = Camera.ViewportSize  
    local center = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)  
 
+   -- Update Saiz Bulatan GUI FOV
    pcall(function()
-       tickCounter = tickCounter + (dt * 10)
-       local animOffset = math.sin(tickCounter) * 3 + 12
-       local length = 8
-
-       if CrosshairLines.Top then
-           for _, line in pairs(CrosshairLines) do line.Visible = true end
-           
-           CrosshairLines.Top.From = Vector2.new(center.X, center.Y - animOffset - length)
-           CrosshairLines.Top.To = Vector2.new(center.X, center.Y - animOffset)
-
-           CrosshairLines.Bottom.From = Vector2.new(center.X, center.Y + animOffset)
-           CrosshairLines.Bottom.To = Vector2.new(center.X, center.Y + animOffset + length)
-
-           CrosshairLines.Left.From = Vector2.new(center.X - animOffset - length, center.Y)
-           CrosshairLines.Left.To = Vector2.new(center.X - animOffset, center.Y)
-
-           CrosshairLines.Right.From = Vector2.new(center.X + animOffset, center.Y)
-           CrosshairLines.Right.To = Vector2.new(center.X + animOffset + length, center.Y)
-       end
+       local diameter = Settings.Radius * 2
+       FOVCircleFrame.Size = UDim2.new(0, diameter, 0, diameter)
    end)
 
-   local inMatch = IsInGame()
-
+   -- Target Lock & Aimbot Logic
    pcall(function()
-       if inMatch then  
-           if FOVCircle then  
-               FOVCircle.Position = center  
-               FOVCircle.Radius = Settings.Radius  
-               FOVCircle.Visible = true  
-           end  
-       else  
-           if FOVCircle then FOVCircle.Visible = false end  
-       end  
-   end)
+       local ClosestPlayer = nil  
+       local ShortestDist = math.huge  
 
-   pcall(function()
-       if inMatch then  
-           local ClosestPlayer = nil  
-           local ShortestDist = math.huge  
-
-           for _, player in ipairs(Players:GetPlayers()) do  
-               if IsValidTarget(player) then  
-                   local targetPart = GetTargetPart(player.Character)  
-                   if targetPart then  
-                       local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)  
-                       if onScreen then  
-                           local targetVec = Vector2.new(screenPos.X, screenPos.Y)  
-                           local diff = targetVec - center  
-                           
-                           if diff.Magnitude <= Settings.Radius then
-                               if diff.Magnitude < ShortestDist then  
-                                   ClosestPlayer = player  
-                                   ShortestDist = diff.Magnitude
-                               end
+       for _, player in ipairs(Players:GetPlayers()) do  
+           if IsValidTarget(player) then  
+               local targetPart = GetTargetPart(player.Character)  
+               if targetPart then  
+                   local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)  
+                   if onScreen then  
+                       local targetVec = Vector2.new(screenPos.X, screenPos.Y)  
+                       local diff = targetVec - center  
+                       
+                       if diff.Magnitude <= Settings.Radius then
+                           if diff.Magnitude < ShortestDist then  
+                               ClosestPlayer = player  
+                               ShortestDist = diff.Magnitude
                            end
-                       end  
+                       end
                    end  
                end  
            end  
-           Settings.Target = ClosestPlayer  
-       else  
-           Settings.Target = nil  
        end  
+       Settings.Target = ClosestPlayer  
 
-       if inMatch and Settings.TargetLockEnabled and Settings.Target and Settings.Target.Character then  
+       if Settings.TargetLockEnabled and Settings.Target and Settings.Target.Character then  
            local targetPart = GetTargetPart(Settings.Target.Character)  
            if targetPart then  
                Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, targetPart.Position)
@@ -476,6 +473,7 @@ end
 CreateToggleButton("Speed [ON]", false, function(v) Settings.SpeedEnabled = v end)
 CreateSlider("Speed Value", 16, 200, 16, function(v) Settings.SpeedValue = v end)
 CreateSlider("Circle Radius / FOV", 50, 800, 200, function(v) Settings.Radius = v end)
+CreateSlider("Camera POV", 30, 120, 70, function(v) Settings.POVValue = v end)
 
 CreateToggleButton("Player ESP", false, function(v) Settings.ESPEnabled = v end)
 CreateToggleButton("Debug Hitboxes", false, function(v)
@@ -488,7 +486,7 @@ CreateSlider("Hitbox Size", 2, 20, 5, function(v)
 end)
 CreateToggleButton("RTX Shaders", false, function(v) ToggleRTX(v) end)
 
--- --- BUTANG TARGET LOCK DRAGGABLE (Di luar menu utama) ---
+-- --- BUTANG TARGET LOCK DRAGGABLE ---
 local LockButton = Instance.new("TextButton", PhantomUI)
 LockButton.Size = UDim2.new(0, 120, 0, 40)
 LockButton.Position = UDim2.new(0, 80, 0, 20)
@@ -516,7 +514,7 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
-UserInputService.InputEnded:Connect(function(input)
+LockButton.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         lockDragging = false
     end
@@ -589,7 +587,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
    end
 end)
 
--- --- DRAGGING SYSTEM (Main Menu & S Toggle) ---
+-- --- DRAGGING SYSTEM ---
 local function MakeDraggable(obj)
    local drag, startPos, inputStart
    obj.InputBegan:Connect(function(i)
@@ -611,4 +609,5 @@ end
 
 MakeDraggable(MainFrame)
 MakeDraggable(ToggleButton)
+
 
