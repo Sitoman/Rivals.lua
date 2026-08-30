@@ -2,11 +2,13 @@ local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
 local Lighting = game:GetService("Lighting")
 
 local localPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
+local FileName = "SitomanStudioHub_Config.json"
 local Settings = {
    SpeedEnabled = false,
    SpeedValue = 16,
@@ -18,6 +20,39 @@ local Settings = {
    SpectateTarget = nil,
    SpectateEnabled = false
 }
+
+local function SaveSettings()
+    pcall(function()
+        if writefile and type(writefile) == "function" then
+            local success, encoded = pcall(function()
+                return HttpService:JSONEncode(Settings)
+            end)
+            if success then
+                writefile(FileName, encoded)
+            end
+        end
+    end)
+end
+
+local function LoadSettings()
+    pcall(function()
+        if readfile and isfile and isfile(FileName) then
+            local content = readfile(FileName)
+            local success, decoded = pcall(function()
+                return HttpService:JSONDecode(content)
+            end)
+            if success and type(decoded) == "table" then
+                for k, v in pairs(decoded) do
+                    if Settings[k] ~= nil then
+                        Settings[k] = v
+                    end
+                end
+            end
+        end
+    end)
+end
+
+LoadSettings()
 
 local parentGui = pcall(function() return CoreGui end) and CoreGui:FindFirstChild("RobloxGui") or localPlayer:WaitForChild("PlayerGui")
 
@@ -117,7 +152,7 @@ local LockButton = Instance.new("TextButton", PhantomUI)
 LockButton.Size = UDim2.new(0, 100, 0, 36)
 LockButton.Position = UDim2.new(0, 75, 0, 12)
 LockButton.BackgroundColor3 = Color3.fromRGB(14, 14, 18)
-LockButton.Text = "Lock: OFF"
+LockButton.Text = Settings.TargetLockEnabled and "Lock: ON" or "Lock: OFF"
 LockButton.TextColor3 = Color3.fromRGB(240, 240, 240)
 LockButton.Font = Enum.Font.GothamBold
 LockButton.TextSize = 11
@@ -405,10 +440,10 @@ local function CreateSlider(text, min, max, default, callback)
    end)
 end
 
-CreateToggleButton("Speed", Settings.SpeedEnabled, function(v) Settings.SpeedEnabled = v end)
-CreateSlider("Speed Value", 16, 200, Settings.SpeedValue, function(v) Settings.SpeedValue = v end)
-CreateSlider("Circle Radius / FOV", 50, 800, Settings.Radius, function(v) Settings.Radius = v end)
-CreateToggleButton("Player ESP", Settings.ESPEnabled, function(v) Settings.ESPEnabled = v end)
+CreateToggleButton("Speed", Settings.SpeedEnabled, function(v) Settings.SpeedEnabled = v; SaveSettings() end)
+CreateSlider("Speed Value", 16, 200, Settings.SpeedValue, function(v) Settings.SpeedValue = v; SaveSettings() end)
+CreateSlider("Circle Radius / FOV", 50, 800, Settings.Radius, function(v) Settings.Radius = v; SaveSettings() end)
+CreateToggleButton("Player ESP", Settings.ESPEnabled, function(v) Settings.ESPEnabled = v; SaveSettings() end)
 
 local StopFreezeBtn = Instance.new("TextButton", Container)
 StopFreezeBtn.Size = UDim2.new(1, 0, 0, 35)
@@ -487,6 +522,7 @@ task.spawn(RefreshPlayerList)
 LockButton.MouseButton1Click:Connect(function()
     Settings.TargetLockEnabled = not Settings.TargetLockEnabled
     LockButton.Text = Settings.TargetLockEnabled and "Lock: ON" or "Lock: OFF"
+    SaveSettings()
 end)
 
 local isOpen = true
@@ -520,6 +556,3 @@ end
 MakeDraggable(MainFrame)
 MakeDraggable(ToggleButton)
 MakeDraggable(LockButton)
-
-
-
