@@ -16,9 +16,7 @@ local Settings = {
    ESPEnabled = false,
    Target = nil,
    TargetLockEnabled = false,
-   POVValue = 70,
-   SpectateTarget = nil,
-   SpectateEnabled = false
+   POVValue = 70
 }
 
 local function SaveSettings()
@@ -108,7 +106,7 @@ for i = 1, 4 do
 end
 
 local MainFrame = Instance.new("Frame", PhantomUI)
-MainFrame.Size = UDim2.new(0, 300, 0, 560)
+MainFrame.Size = UDim2.new(0, 300, 0, 360)
 MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
 MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
 MainFrame.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
@@ -190,27 +188,16 @@ RunService.Heartbeat:Connect(function()
             local humanoid = char:FindFirstChildOfClass("Humanoid")
             local hrp = char:FindFirstChild("HumanoidRootPart")
             if humanoid and hrp then
-                if Settings.SpectateEnabled and Settings.SpectateTarget and Settings.SpectateTarget.Character then
-                    local targetChar = Settings.SpectateTarget.Character
-                    local targetHrp = targetChar:FindFirstChild("HumanoidRootPart")
-                    if targetHrp then
-                        hrp.CFrame = targetHrp.CFrame + Vector3.new(0, 5, 0)
-                        hrp.AssemblyLinearVelocity = Vector3.zero
-                        hrp.AssemblyAngularVelocity = Vector3.zero
-                        humanoid.PlatformStand = true
+                humanoid.PlatformStand = false
+                if Settings.SpeedEnabled then
+                    humanoid.WalkSpeed = Settings.SpeedValue
+                    if humanoid.MoveDirection.Magnitude > 0 then
+                        local currentVelocity = hrp.AssemblyLinearVelocity
+                        local moveDir = humanoid.MoveDirection
+                        hrp.AssemblyLinearVelocity = Vector3.new(moveDir.X * Settings.SpeedValue, currentVelocity.Y, moveDir.Z * Settings.SpeedValue)
                     end
                 else
-                    humanoid.PlatformStand = false
-                    if Settings.SpeedEnabled then
-                        humanoid.WalkSpeed = Settings.SpeedValue
-                        if humanoid.MoveDirection.Magnitude > 0 then
-                            local currentVelocity = hrp.AssemblyLinearVelocity
-                            local moveDir = humanoid.MoveDirection
-                            hrp.AssemblyLinearVelocity = Vector3.new(moveDir.X * Settings.SpeedValue, currentVelocity.Y, moveDir.Z * Settings.SpeedValue)
-                        end
-                    else
-                        humanoid.WalkSpeed = 16
-                    end
+                    humanoid.WalkSpeed = 16
                 end
             end
         end
@@ -444,80 +431,6 @@ CreateToggleButton("Speed", Settings.SpeedEnabled, function(v) Settings.SpeedEna
 CreateSlider("Speed Value", 16, 200, Settings.SpeedValue, function(v) Settings.SpeedValue = v; SaveSettings() end)
 CreateSlider("Circle Radius / FOV", 50, 800, Settings.Radius, function(v) Settings.Radius = v; SaveSettings() end)
 CreateToggleButton("Player ESP", Settings.ESPEnabled, function(v) Settings.ESPEnabled = v; SaveSettings() end)
-
-local StopFreezeBtn = Instance.new("TextButton", Container)
-StopFreezeBtn.Size = UDim2.new(1, 0, 0, 35)
-StopFreezeBtn.BackgroundColor3 = Color3.fromRGB(50, 15, 15)
-StopFreezeBtn.Text = "OFF FREEZE AND INFINITY LOOP [OFF]"
-StopFreezeBtn.TextColor3 = Color3.fromRGB(255, 200, 200)
-StopFreezeBtn.Font = Enum.Font.GothamBold
-StopFreezeBtn.TextSize = 11
-Instance.new("UICorner", StopFreezeBtn).CornerRadius = UDim.new(0, 8)
-local StopStroke = Instance.new("UIStroke", StopFreezeBtn)
-StopStroke.Thickness = 1.5
-table.insert(SliderStrokesList, StopStroke)
-
-StopFreezeBtn.MouseButton1Click:Connect(function()
-    Settings.SpectateEnabled = false
-    Settings.SpectateTarget = nil
-    StopFreezeBtn.Text = "OFF FREEZE AND INFINITY LOOP [OFF]"
-end)
-
-local TpLabel = Instance.new("TextLabel", Container)
-TpLabel.Size = UDim2.new(1, 0, 0, 20)
-TpLabel.BackgroundTransparency = 1
-TpLabel.Text = "CLICK TO FREEZE OVERHEAD PLAYER"
-TpLabel.TextColor3 = Color3.fromRGB(150, 180, 255)
-TpLabel.Font = Enum.Font.GothamBold
-TpLabel.TextSize = 10
-TpLabel.TextXAlignment = Enum.TextXAlignment.Center
-
-local PlayerListContainer = Instance.new("ScrollingFrame", Container)
-PlayerListContainer.Size = UDim2.new(1, 0, 0, 130)
-PlayerListContainer.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
-PlayerListContainer.CanvasSize = UDim2.new(0, 0, 0, 0)
-PlayerListContainer.ScrollBarThickness = 3
-Instance.new("UICorner", PlayerListContainer).CornerRadius = UDim.new(0, 8)
-local ListStroke = Instance.new("UIStroke", PlayerListContainer)
-ListStroke.Thickness = 1.2
-table.insert(SliderStrokesList, ListStroke)
-
-local ListLayout = Instance.new("UIListLayout", PlayerListContainer)
-ListLayout.Padding = UDim.new(0, 4)
-
-local function RefreshPlayerList()
-    for _, child in ipairs(PlayerListContainer:GetChildren()) do
-        if child:IsA("TextButton") then child:Destroy() end
-    end
-    
-    local players = Players:GetPlayers()
-    local count = 0
-    for _, p in ipairs(players) do
-        if p ~= localPlayer then
-            count = count + 1
-            local pBtn = Instance.new("TextButton", PlayerListContainer)
-            pBtn.Size = UDim2.new(1, -4, 0, 30)
-            pBtn.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
-            pBtn.Text = "  > " .. p.Name
-            pBtn.TextColor3 = Color3.fromRGB(240, 240, 240)
-            pBtn.Font = Enum.Font.Gotham
-            pBtn.TextSize = 12
-            pBtn.TextXAlignment = Enum.TextXAlignment.Left
-            Instance.new("UICorner", pBtn).CornerRadius = UDim.new(0, 6)
-            
-            pBtn.MouseButton1Click:Connect(function()
-                Settings.SpectateTarget = p
-                Settings.SpectateEnabled = true
-                StopFreezeBtn.Text = "OFF FREEZE (" .. p.Name .. ") [ON]"
-            end)
-        end
-    end
-    PlayerListContainer.CanvasSize = UDim2.new(0, 0, 0, count * 34)
-end
-
-Players.PlayerAdded:Connect(RefreshPlayerList)
-Players.PlayerRemoving:Connect(RefreshPlayerList)
-task.spawn(RefreshPlayerList)
 
 LockButton.MouseButton1Click:Connect(function()
     Settings.TargetLockEnabled = not Settings.TargetLockEnabled
