@@ -16,7 +16,18 @@ local Settings = {
    ESPEnabled = false,
    Target = nil,
    TargetLockEnabled = false,
-   POVValue = 70
+   POVValue = 70,
+   HitboxEnabled = false,
+   HitboxSize = 2,
+   LockPart = "Head",
+   FullbrightEnabled = false
+}
+
+local DefaultLighting = {
+    Ambient = Lighting.Ambient,
+    Brightness = Lighting.Brightness,
+    GlobalShadows = Lighting.GlobalShadows,
+    FogEnd = Lighting.FogEnd
 }
 
 local function SaveSettings()
@@ -106,7 +117,7 @@ for i = 1, 4 do
 end
 
 local MainFrame = Instance.new("Frame", PhantomUI)
-MainFrame.Size = UDim2.new(0, 300, 0, 360)
+MainFrame.Size = UDim2.new(0, 300, 0, 450)
 MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
 MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
 MainFrame.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
@@ -170,7 +181,11 @@ UIList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
 end)
 
 local function GetTargetPart(character)
-   return character and (character:FindFirstChild("Head") or character:FindFirstChild("HumanoidRootPart"))
+   if not character then return nil end
+   return character:FindFirstChild(Settings.LockPart) 
+       or character:FindFirstChild("Head") 
+       or character:FindFirstChild("HumanoidRootPart") 
+       or character:FindFirstChild("Torso")
 end
 
 local function IsValidTarget(player)
@@ -181,6 +196,7 @@ local function IsValidTarget(player)
    return true
 end
 
+-- HEARTBEAT LOOP (SPEED, HITBOX & FULLBRIGHT)
 RunService.Heartbeat:Connect(function()
     pcall(function()
         local char = localPlayer.Character
@@ -189,6 +205,8 @@ RunService.Heartbeat:Connect(function()
             local hrp = char:FindFirstChild("HumanoidRootPart")
             if humanoid and hrp then
                 humanoid.PlatformStand = false
+                
+                -- Speed System
                 if Settings.SpeedEnabled then
                     humanoid.WalkSpeed = Settings.SpeedValue
                     if humanoid.MoveDirection.Magnitude > 0 then
@@ -198,6 +216,39 @@ RunService.Heartbeat:Connect(function()
                     end
                 else
                     humanoid.WalkSpeed = 16
+                end
+            end
+        end
+
+        -- Fullbright System
+        if Settings.FullbrightEnabled then
+            Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+            Lighting.Brightness = 2
+            Lighting.GlobalShadows = false
+            Lighting.FogEnd = 9e9
+        else
+            Lighting.Ambient = DefaultLighting.Ambient
+            Lighting.Brightness = DefaultLighting.Brightness
+            Lighting.GlobalShadows = DefaultLighting.GlobalShadows
+            Lighting.FogEnd = DefaultLighting.FogEnd
+        end
+
+        -- Hitbox Extender Loop
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= localPlayer and player.Character then
+                local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    if Settings.HitboxEnabled then
+                        hrp.Size = Vector3.new(2, 2, 1) * Settings.HitboxSize
+                        hrp.Transparency = 0.7
+                        hrp.BrickColor = BrickColor.new("Really red")
+                        hrp.Material = Enum.Material.Neon
+                        hrp.CanCollide = false
+                    else
+                        hrp.Size = Vector3.new(2, 2, 1)
+                        hrp.Transparency = 1
+                        hrp.CanCollide = true
+                    end
                 end
             end
         end
@@ -427,10 +478,39 @@ local function CreateSlider(text, min, max, default, callback)
    end)
 end
 
+-- WIDGET UTAMA
 CreateToggleButton("Speed", Settings.SpeedEnabled, function(v) Settings.SpeedEnabled = v; SaveSettings() end)
 CreateSlider("Speed Value", 16, 200, Settings.SpeedValue, function(v) Settings.SpeedValue = v; SaveSettings() end)
 CreateSlider("Circle Radius / FOV", 50, 800, Settings.Radius, function(v) Settings.Radius = v; SaveSettings() end)
 CreateToggleButton("Player ESP", Settings.ESPEnabled, function(v) Settings.ESPEnabled = v; SaveSettings() end)
+
+-- LOCK PART SELECTOR
+local partsList = {"Head", "HumanoidRootPart", "UpperTorso"}
+local currentPartIdx = 1
+
+local LockPartBtn = Instance.new("TextButton", Container)
+LockPartBtn.Size = UDim2.new(1, 0, 0, 40)
+LockPartBtn.BackgroundColor3 = Color3.fromRGB(14, 14, 18)
+LockPartBtn.Text = "Lock Target: " .. Settings.LockPart
+LockPartBtn.TextColor3 = Color3.fromRGB(240, 240, 240)
+LockPartBtn.Font = Enum.Font.GothamMedium
+LockPartBtn.TextSize = 12
+Instance.new("UICorner", LockPartBtn).CornerRadius = UDim.new(0, 8)
+local LockPartStroke = Instance.new("UIStroke", LockPartBtn)
+LockPartStroke.Thickness = 1.8
+table.insert(SliderStrokesList, LockPartStroke)
+
+LockPartBtn.MouseButton1Click:Connect(function()
+    currentPartIdx = currentPartIdx % #partsList + 1
+    Settings.LockPart = partsList[currentPartIdx]
+    LockPartBtn.Text = "Lock Target: " .. Settings.LockPart
+    SaveSettings()
+end)
+
+-- HITBOX & FULLBRIGHT WIDGETS
+CreateToggleButton("Hitbox Extender", Settings.HitboxEnabled, function(v) Settings.HitboxEnabled = v; SaveSettings() end)
+CreateSlider("Hitbox Size", 1, 10, Settings.HitboxSize, function(v) Settings.HitboxSize = v; SaveSettings() end)
+CreateToggleButton("Fullbright / Bright Map", Settings.FullbrightEnabled, function(v) Settings.FullbrightEnabled = v; SaveSettings() end)
 
 LockButton.MouseButton1Click:Connect(function()
     Settings.TargetLockEnabled = not Settings.TargetLockEnabled
